@@ -88,7 +88,8 @@ class TradingProcessor:
                         # Use engine-based signal extractor
                         try:
                             self.signal_extractors[symbol] = engine.create_signal_extractor(
-                                engine_strategy, 
+                                engine_strategy,
+                                symbol,
                                 min_bars_required=lookback_period,
                                 granularity=granularity
                             )
@@ -249,7 +250,7 @@ class TradingProcessor:
                         logger.info(
                             f"Processing {symbol} with random strategy: {len(current_data_df)} bars available"
                         )
-                        signal = self.signal_extractors[symbol].extract_signal(current_data_df)
+                        signal = self.signal_extractors[symbol].extract_signal(current_data_df, {})
                         signals[symbol] = signal
                         self.active_signals[symbol] = signal
                     else:
