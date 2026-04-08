@@ -397,7 +397,7 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
                 self._symbol = symbol
 
             @property
-            def symbol(self):
+            def sq_symbol(self):
                 return self._symbol
                 
         context = MockContext(self.signal_symbol)
@@ -702,9 +702,9 @@ class ZiplineMultiTickerSignalExtractor(BaseSignalExtractor, EngineSignalExtract
             return self._process_multi_symbol_data(multi_symbol_data)
             
         except Exception as e:
-            logger.error(f"Error extracting Zipline multi-ticker signals: {e}")
+            logger.error(f"Error extracting Zipline multi-ticker signalsxxx: {e}")
             # Return HOLD signals for all symbols
-            return {symbol: self._safe_hold(error=e) for symbol in self.symbols}
+            #return {symbol: self._safe_hold(error=e) for symbol in self.symbols}
     
     def _process_multi_symbol_data(self, symbol_data: dict[str, pd.DataFrame]) -> dict[str, TradingSignal]:
         """Process multiple symbols using per-symbol strategy execution for safety"""
@@ -718,7 +718,7 @@ class ZiplineMultiTickerSignalExtractor(BaseSignalExtractor, EngineSignalExtract
                 signals[symbol] = signal
                 
             except Exception as e:
-                logger.error(f"Error processing symbol {symbol}: {e}")
+                logger.error(f"Error processing symbol {symbol}: {e}", exc_info=True)
                 signals[symbol] = self._safe_hold(error=e)
         
         return signals
