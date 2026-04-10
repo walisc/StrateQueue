@@ -70,12 +70,24 @@ class DataManager:
         logger.debug("Fetching initial historical data...")
 
         # Start real-time feed first so we can get live data even if historical fails
-        self.data_ingester.start_realtime_feed()
+
+        # [CW] We are removing this as we already start the realtime feed when we setup
+        # the data_ingester above. StrateQueue.data.ingestion.setup_data_ingestion, which in turn
+        # is called when we initialize the LiveTradingSystem StrateQueue.live_system.orchestrator.LiveTradingSystem
+
+        # self.data_ingester.start_realtime_feed()
 
         for symbol in self.symbols:
             try:
                 # Subscribe to real-time data for this symbol
-                await self.data_ingester.subscribe_to_symbol(symbol)
+
+                # [CW] This continues from our comment above
+                # Since we start this in an event loop already, when it subscribes it patches asyncio to allow child
+                # async process to run (see src/StrateQueue/data/ingestion.py:90).
+                # Doing it again cause a blocking operation, making everything stuck
+                # IT for this reason we are commenting this out. p.s as already mentioned, we will have already subscribed
+                # so this should break anything
+                #await self.data_ingester.subscribe_to_symbol(symbol)
 
                 # Try to fetch historical data with granularity
                 historical_data = await self.data_ingester.fetch_historical_data(

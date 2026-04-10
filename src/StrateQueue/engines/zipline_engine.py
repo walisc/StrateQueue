@@ -408,7 +408,7 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
             self._mock_context = context
             return context
 
-    def _run_strategy_with_data(self, zipline_data: pd.DataFrame, all_historical_data: dict[str, pd.DataFrame]) -> bool:
+    async def _run_strategy_with_data(self, zipline_data: pd.DataFrame, all_historical_data: dict[str, pd.DataFrame]) -> bool:
         """Run the strategy with our data and capture any signals"""
         try:
             # Clear any previous signals
@@ -438,11 +438,11 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
                 
                 # Run initialize function
                 if initialize_func:
-                    initialize_func(context)
+                    await initialize_func(context)
                 
                 # Run handle_data function with the last bar of data
                 if handle_data_func:
-                    handle_data_func(context, data)
+                    await handle_data_func(context, data)
                     
             finally:
                 # Always restore order functions
@@ -454,7 +454,7 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
             logger.error(f"Error running Zipline strategy: {e}")
             return False
 
-    def extract_signal(self, historical_data: pd.DataFrame, all_historical_data: dict[str, pd.DataFrame]) -> TradingSignal:
+    async def extract_signal(self, historical_data: pd.DataFrame, all_historical_data: dict[str, pd.DataFrame]) -> TradingSignal:
         """Extract trading signal from historical data using Zipline algorithm"""
         try:
             # Check for insufficient data first
@@ -468,7 +468,7 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
             data_frequency = self._determine_data_frequency(historical_data)
             
             # Run strategy with our custom data interface
-            strategy_success = self._run_strategy_with_data(zipline_data, all_historical_data)
+            strategy_success = await self._run_strategy_with_data(zipline_data, all_historical_data)
             
             # Extract signal from the queue
             if self._signal_queue.empty():
@@ -670,7 +670,7 @@ class ZiplineMultiTickerSignalExtractor(BaseSignalExtractor, EngineSignalExtract
             )
         return self._symbol_extractors[symbol]
         
-    def extract_signals(self, multi_symbol_data: dict[str, pd.DataFrame]) -> dict[str, TradingSignal]:
+    async def extract_signals(self, multi_symbol_data: dict[str, pd.DataFrame]) -> dict[str, TradingSignal]:
         """Extract trading signals for multiple symbols using per-symbol Zipline strategy execution"""
         try:
             # Check if we have data for all symbols
@@ -699,14 +699,14 @@ class ZiplineMultiTickerSignalExtractor(BaseSignalExtractor, EngineSignalExtract
                 return signals
             
             # All symbols have sufficient data - process them together
-            return self._process_multi_symbol_data(multi_symbol_data)
+            return await self._process_multi_symbol_data(multi_symbol_data)
             
         except Exception as e:
             logger.error(f"Error extracting Zipline multi-ticker signalsxxx: {e}")
             # Return HOLD signals for all symbols
             #return {symbol: self._safe_hold(error=e) for symbol in self.symbols}
     
-    def _process_multi_symbol_data(self, symbol_data: dict[str, pd.DataFrame]) -> dict[str, TradingSignal]:
+    async def _process_multi_symbol_data(self, symbol_data: dict[str, pd.DataFrame]) -> dict[str, TradingSignal]:
         """Process multiple symbols using per-symbol strategy execution for safety"""
         signals = {}
         
@@ -714,7 +714,7 @@ class ZiplineMultiTickerSignalExtractor(BaseSignalExtractor, EngineSignalExtract
             try:
                 # Get the per-symbol extractor and run the strategy on this symbol's data
                 extractor = self._get_symbol_extractor(symbol)
-                signal = extractor.extract_signal(df, symbol_data)
+                signal = await extractor.extract_signal(df, symbol_data)
                 signals[symbol] = signal
                 
             except Exception as e:

@@ -169,7 +169,7 @@ class TradingProcessor:
         if all_symbols_ready and symbol_data:
             try:
                 # Single vectorized call for all symbols
-                multi_signals = self.multi_ticker_extractor.extract_signals(symbol_data)
+                multi_signals = await self.multi_ticker_extractor.extract_signals(symbol_data)
                 
                 # Update tracking
                 for symbol, signal in multi_signals.items():
@@ -217,7 +217,7 @@ class TradingProcessor:
                         current_prices[crypto_pair] = current_price
 
                     # Extract signal from cumulative data
-                    signal = self.signal_extractors[symbol].extract_signal(current_data_df)
+                    signal = await self.signal_extractors[symbol].extract_signal(current_data_df)
                     # Attach last bar OHLCV into metadata for printing/debugging
                     try:
                         last_bar = current_data_df.iloc[-1]
@@ -250,7 +250,7 @@ class TradingProcessor:
                         logger.info(
                             f"Processing {symbol} with random strategy: {len(current_data_df)} bars available"
                         )
-                        signal = self.signal_extractors[symbol].extract_signal(current_data_df, {})
+                        signal = await self.signal_extractors[symbol].extract_signal(current_data_df, {})
                         signals[symbol] = signal
                         self.active_signals[symbol] = signal
                     else:
