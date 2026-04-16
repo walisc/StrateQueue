@@ -890,6 +890,32 @@ class StatisticsManager:
         
         return positions
 
+    def get_positions_from_traders(self):
+        if not self._trades:
+            return {}
+
+        # Group trades by symbol
+        positions = {}
+
+        for trade in self._trades:
+            symbol = trade.symbol
+
+            if symbol not in positions:
+                positions[symbol] = {
+                    "amount": 0,
+                    "cost_basis": trade.price + trade.fees,
+                    "last_sale_price": self.get_latest_price(symbol)
+                }
+
+            if trade.action == "buy":
+                positions[symbol]["amount"] += trade.quantity
+                positions[symbol]["last_sale_price"] = self.get_latest_price(symbol)
+            elif trade.action == "sell":
+                positions[symbol]["amount"] -= trade.quantity
+                positions[symbol]["last_sale_price"] = self.get_latest_price(symbol)
+
+        return positions
+
     # ------------------------------------------------------------------
     # MAIN CALCULATION METHOD (returns basic info only)
     # ------------------------------------------------------------------

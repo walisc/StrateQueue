@@ -12,8 +12,8 @@ import numpy as np
 
 from ..core.base_signal_extractor import BaseSignalExtractor
 from ..core.signal_extractor import TradingSignal, SignalType
-from ..engines.engine_base import (TradingEngine, EngineStrategy, EngineSignalExtractor, 
-                                  build_engine_info, EngineInfo, load_module_from_path, 
+from ..engines.engine_base import (TradingEngine, EngineStrategy, EngineSignalExtractor,
+                                  build_engine_info, EngineInfo, load_module_from_path,
                                   find_strategy_candidates, select_single_strategy)
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ if ZIPLINE_AVAILABLE:
     def _pre_patch_zipline_api():
         """Pre-patch zipline.api with safe mock functions"""
         global _ORIGINAL_ZIPLINE_FUNCTIONS
-        
+
         # Store originals
         _ORIGINAL_ZIPLINE_FUNCTIONS = {
             'symbol': getattr(zipline.api, 'symbol', None),
@@ -49,7 +49,7 @@ if ZIPLINE_AVAILABLE:
             'order_target_percent': getattr(zipline.api, 'order_target_percent', None),
             'order_target_value': getattr(zipline.api, 'order_target_value', None),
         }
-        
+
         # Create safe mock functions
         def safe_symbol(symbol_name):
             class MockAsset:
@@ -61,22 +61,22 @@ if ZIPLINE_AVAILABLE:
                 def __repr__(self):
                     return f"MockAsset('{self.symbol}')"
             return MockAsset(symbol_name)
-        
+
         def safe_record(**kwargs):
             pass  # Do nothing
-            
+
         def safe_order(*args, **kwargs):
             return type('MockOrder', (), {'id': 'mock'})()
-            
+
         def safe_order_target(*args, **kwargs):
             return type('MockOrder', (), {'id': 'mock'})()
-            
+
         def safe_order_target_percent(*args, **kwargs):
             return type('MockOrder', (), {'id': 'mock'})()
-            
+
         def safe_order_target_value(*args, **kwargs):
             return type('MockOrder', (), {'id': 'mock'})()
-        
+
         # Apply patches
         zipline.api.symbol = safe_symbol
         zipline.api.record = safe_record
@@ -114,13 +114,13 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
         self.granularity = granularity
         self.strategy_params = strategy_params
         self.signal_symbol = symbol
-        
+
         # Signal capture queue
         self._signal_queue = queue.Queue()
-        
+
         # Store original order functions for restoration
         self._original_functions = {}
-        
+
         # Initialize capture tracking
         self._order_capture_active = False
 
@@ -128,10 +128,10 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
         """Patch Zipline order functions to capture trading signals during strategy execution"""
         if self._order_capture_active:
             return
-            
+
         import zipline.api
         from ..core.signal_extractor import OrderFunction, ExecStyle, TradingSignal
-        
+
         # Store current functions (which might already be our safe mocks)
         self._original_functions = {
             'order': getattr(zipline.api, 'order', None),
@@ -141,7 +141,7 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
             'order_target_percent': getattr(zipline.api, 'order_target_percent', None),
             'order_target_value': getattr(zipline.api, 'order_target_value', None),
         }
-        
+
         def _build_capture_function(func_type: OrderFunction):
             """Build a capture function for a specific order function type"""
             def _capture(asset, *args, **kwargs):
@@ -150,7 +150,7 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
                 stop_price = kwargs.get("stop_price")
                 style = kwargs.get("style")
                 exchange = kwargs.get("exchange")
-                
+
                 # Determine execution style
                 exec_style = ExecStyle.MARKET
                 if isinstance(style, zipline.finance.execution.StopLimitOrder):
@@ -173,7 +173,7 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
                     exec_style = ExecStyle.LIMIT
                 elif stop_price:
                     exec_style = ExecStyle.STOP
-                
+
                 # Function-specific parameter extraction
                 quantity = None
                 value = None
@@ -181,37 +181,37 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
                 target_quantity = None
                 target_value = None
                 target_percent = None
-                
+
                 if func_type == OrderFunction.ORDER:
                     amount = args[0] if args else kwargs.get("amount", 0)
                     quantity = abs(amount)
                     side = SignalType.BUY if amount > 0 else SignalType.SELL
-                    
+
                 elif func_type == OrderFunction.ORDER_VALUE:
                     amount = args[0] if args else kwargs.get("value", 0)
                     value = abs(amount)
                     side = SignalType.BUY if amount > 0 else SignalType.SELL
-                    
+
                 elif func_type == OrderFunction.ORDER_PERCENT:
                     amount = args[0] if args else kwargs.get("percent", 0)
                     percent = abs(amount)
                     side = SignalType.BUY if amount > 0 else SignalType.SELL
-                    
+
                 elif func_type == OrderFunction.ORDER_TARGET:
                     target = args[0] if args else kwargs.get("target", 0)
                     target_quantity = target
                     side = SignalType.BUY if target > 0 else (SignalType.SELL if target == 0 else SignalType.BUY)
-                    
+
                 elif func_type == OrderFunction.ORDER_TARGET_VALUE:
                     target = args[0] if args else kwargs.get("target", 0)
                     target_value = target
                     side = SignalType.BUY if target > 0 else (SignalType.SELL if target == 0 else SignalType.BUY)
-                    
+
                 elif func_type == OrderFunction.ORDER_TARGET_PERCENT:
                     target = args[0] if args else kwargs.get("target", 0)
                     target_percent = target
                     side = SignalType.BUY if target > 0 else (SignalType.SELL if target == 0 else SignalType.BUY)
-                
+
                 # Create comprehensive signal
                 signal = TradingSignal(
                     signal=side,
@@ -230,12 +230,12 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
                     stop_price=stop_price,
                     exchange=exchange
                 )
-                
+
                 self._signal_queue.put(signal)
                 return type('MockOrder', (), {'id': f'mock_{func_type.value}'})()
-            
+
             return _capture
-        
+
         # Create capture functions for all order types
         capture_order = _build_capture_function(OrderFunction.ORDER)
         capture_order_value = _build_capture_function(OrderFunction.ORDER_VALUE)
@@ -251,7 +251,7 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
         zipline.api.order_target = capture_order_target
         zipline.api.order_target_value = capture_order_target_value
         zipline.api.order_target_percent = capture_order_target_percent
-        
+
         # CRITICAL: Also patch the strategy module's local references
         # Strategy modules import functions like: from zipline.api import order_target_percent
         # This creates local references that need to be patched too
@@ -267,21 +267,21 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
             self.strategy_obj.order_target_value = capture_order_target_value
         if hasattr(self.strategy_obj, 'order_target_percent'):
             self.strategy_obj.order_target_percent = capture_order_target_percent
-        
+
         self._order_capture_active = True
 
     def _restore_order_functions(self):
         """Restore original Zipline order functions"""
         if not self._order_capture_active:
             return
-            
+
         import zipline.api
-        
+
         # Restore original functions
         for name, func in self._original_functions.items():
             if func is not None:
                 setattr(zipline.api, name, func)
-        
+
         self._order_capture_active = False
 
     def _reset_signal_queue(self):
@@ -296,32 +296,32 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
         """Prepare data in format expected by Zipline"""
         # Ensure we have the required OHLCV columns
         required_columns = ['open', 'high', 'low', 'close', 'volume']
-        
+
         # Create a copy and normalize column names to lowercase
         data = historical_data.copy()
         data.columns = [col.lower() for col in data.columns]
-        
+
         # Check if we have the required columns
         missing_columns = [col for col in required_columns if col not in data.columns]
         if missing_columns:
             raise ValueError(f"Missing required columns: {missing_columns}")
-        
+
         # Forward-fill and backward-fill NaN values
         data = data.ffill().bfill()
-        
+
         return data[required_columns]
 
     def _determine_data_frequency(self, historical_data: pd.DataFrame) -> str:
         """Determine the data frequency from the DataFrame index"""
         if len(historical_data) < 2:
             return 'daily'  # Default fallback
-        
+
         # Calculate the time difference between consecutive bars
         time_diff = historical_data.index[1] - historical_data.index[0]
-        
+
         # Convert to minutes
         minutes = time_diff.total_seconds() / 60
-        
+
         if minutes <= 1:
             return 'minute'
         elif minutes <= 60:
@@ -333,7 +333,7 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
         """Create a minimal mock data portal for testing strategies"""
         # For our signal extraction use case, we'll use a simplified approach
         # that allows the strategy to run without full Zipline infrastructure
-        
+
         class MockBarData:
             def __init__(self, signal_symbol, data_df, all_data_df, data_prepare):
                 self.symbol = signal_symbol
@@ -343,36 +343,54 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
 
 
             def get_asset_data_to_use(self, asset):
-                if asset == self.symbol:
+                if asset.symbol == self.symbol:
                     return self.data_df
 
-                if asset not in self.all_data_df:
+                if asset.symbol not in self.all_data_df:
                     return pd.Series([], dtype=float)
 
-                return self.data_prepare(self.all_data_df[asset])
+                return self.data_prepare(self.all_data_df[asset.symbol])
+
+            def _update_and_check_fields(self, field, data_to_use):
+
+                def do_field_update(field_name):
+                    if field_name == 'price':
+                        return 'close'
+                    elif field_name == 'volume':
+                        return 'volume'
+                    return field_name
+
+                if isinstance(field, str):
+                    udpated_field = do_field_update(field)
+                    if udpated_field in data_to_use.columns:
+                        return True, udpated_field
+                    return False, None
+                elif isinstance(field, list):
+                    updated_list = []
+                    for f in field:
+                        udpated_field = do_field_update(f)
+                        if udpated_field not in data_to_use.columns:
+                            return False, None
+                        updated_list.append(udpated_field)
+                    return True, updated_list
+                else:
+                    raise ValueError(f"The specified columns need to be of type str, or list. Type specified:- {type(field)}")
 
             def current(self, asset, field):
                 data_to_use = self.get_asset_data_to_use(asset)
 
-                """Get current value for field"""
-                if field == 'price':
-                    field = 'close'
-                elif field == 'volume':
-                    field = 'volume'
-                
-                if field in data_to_use.columns and len(data_to_use) > 0:
+                id_valid, field = self._update_and_check_fields(field, data_to_use)
+
+                if id_valid and len(data_to_use) > 0:
                     return data_to_use[field].iloc[-1]
                 return np.nan
-                
+
             def history(self, asset, field, bar_count, frequency):
                 data_to_use = self.get_asset_data_to_use(asset)
 
-                """Get historical data"""
-                if field == 'price':
-                    field = 'close'
-                
-                if field in data_to_use.columns:
-                    # Return last bar_count bars
+                id_valid, field = self._update_and_check_fields(field, data_to_use)
+
+                if id_valid and len(data_to_use) > 0:
                     data = data_to_use[field].tail(bar_count)
                     return data
                 else:
@@ -381,26 +399,36 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
 
             def can_trade(self, asset):
                 return asset == self.symbol
-                
+
             def is_stale(self, asset):
                 """Check if data is stale"""
                 return False
-        
+
         return MockBarData(self.signal_symbol, zipline_data, all_historical_data, self._prepare_data_for_zipline)
 
     def _create_mock_context(self):
         """Create a mock context object for strategy execution"""
         class MockContext:
-            def __init__(self, symbol):
+            def __init__(self, symbol, patch_zipline_func, restore_order_func):
                 # Initialize empty context that strategies can populate
                 # Note: strategy's initialize() will set the actual values
                 self._symbol = symbol
+                self._patch_zipline_func = patch_zipline_func
+                self._restore_order_func = restore_order_func
 
             @property
             def sq_symbol(self):
                 return self._symbol
-                
-        context = MockContext(self.signal_symbol)
+
+            @property
+            def sq_symbol_zipline_patcher(self):
+                return self._patch_zipline_func
+
+            @property
+            def sq_symbol_zipline_reset_patcher(self):
+                return self._restore_order_func
+
+        context = MockContext(self.signal_symbol, self._patch_order_functions, self._restore_order_functions)
         # Make sure context persists between calls if we've initialized before
         if hasattr(self, '_mock_context'):
             return self._mock_context
@@ -414,10 +442,10 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
             # Clear any previous signals
             while not self._signal_queue.empty():
                 self._signal_queue.get_nowait()
-            
+
             # Patch order functions FIRST before getting strategy functions
             self._patch_order_functions()
-            
+
             try:
                 # Get strategy functions
                 if hasattr(self.strategy_obj, 'initialize') and hasattr(self.strategy_obj, 'handle_data'):
@@ -428,33 +456,33 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
                     # Module-based strategy
                     initialize_func = getattr(self.strategy_obj, 'initialize', None)
                     handle_data_func = getattr(self.strategy_obj, 'handle_data', None)
-                    
+
                     if not initialize_func or not handle_data_func:
                         raise ValueError("Strategy must have both initialize and handle_data functions")
 
                 # Create mock context and data objects
                 context = self._create_mock_context()
                 data = self._create_mock_data_portal(zipline_data, all_historical_data)
-                
+
                 # Run initialize function
                 if initialize_func:
                     await initialize_func(context)
-                
+
                 # Run handle_data function with the last bar of data
                 if handle_data_func:
                     await handle_data_func(context, data)
-                    
+
             finally:
                 # Always restore order functions
                 self._restore_order_functions()
-            
+
             return True
-            
+
         except Exception as e:
-            logger.error(f"Error running Zipline strategy: {e}")
+            logger.error(f"Error running Zipline strategy: {e}", exc_info=True)
             return False
 
-    async def extract_signal(self, historical_data: pd.DataFrame, all_historical_data: dict[str, pd.DataFrame]) -> TradingSignal:
+    async def extract_signal(self, historical_data: pd.DataFrame, all_historical_data: dict[str, pd.DataFrame], delay_signal_return:bool=False) -> TradingSignal:
         """Extract trading signal from historical data using Zipline algorithm"""
         try:
             # Check for insufficient data first
@@ -463,54 +491,18 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
 
             # Prepare data for Zipline
             zipline_data = self._prepare_data_for_zipline(historical_data)
-            
+
             # Determine data frequency
             data_frequency = self._determine_data_frequency(historical_data)
-            
+
             # Run strategy with our custom data interface
             strategy_success = await self._run_strategy_with_data(zipline_data, all_historical_data)
-            
-            # Extract signal from the queue
-            if self._signal_queue.empty():
-                # Create a basic HOLD signal
-                signal = TradingSignal(
-                    signal=SignalType.HOLD,
-                    price=0.0,  # Will be set below
-                    timestamp=pd.Timestamp.now(),
-                    indicators={}
-                )
-            else:
-                # Get the last signal (most recent trading decision)
-                signal = None
-                while not self._signal_queue.empty():
-                    signal = self._signal_queue.get_nowait()
-                
-                if signal is None:
-                    signal = TradingSignal(
-                        signal=SignalType.HOLD,
-                        price=0.0,
-                        timestamp=pd.Timestamp.now(),
-                        indicators={}
-                    )
 
-            # Always take price from the normalised Zipline dataframe
-            current_price = self._safe_get_last_value(zipline_data['close'])
-            current_timestamp = historical_data.index[-1]
-
-            # Update the signal with actual price and indicators
-            signal.price = current_price
-            signal.timestamp = current_timestamp
-            signal.indicators = self._clean_indicators({
-                'zipline_algorithm': True,
-                'data_frequency': data_frequency,
-                'bars_processed': len(historical_data),
-                'algorithm_result': 'success' if strategy_success else 'error'
-            })
-            
-            # Clear signal queue for next extraction
-            self._reset_signal_queue()
-            
-            return signal
+            self.signal_holder = ZiplineSignalExtractor.SignalHolder(self, data_frequency, historical_data,
+                                                                     strategy_success, zipline_data)
+            if not delay_signal_return:
+                return await self.signal_holder.get_last_signal()
+            return None
 
         except Exception as e:
             logger.error(f"Error extracting Zipline signal: {e}")
@@ -526,15 +518,69 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
                 price = 0.0
             return self._safe_hold(price=price, error=e)
 
+
+    class SignalHolder:
+        def __init__(self, parent, data_frequency: str, historical_data: pd.DataFrame, strategy_success: bool,
+                              zipline_data: pd.DataFrame):
+            self._parent = parent
+            self._data_frequency = data_frequency
+            self._historical_data = historical_data
+            self._strategy_success = strategy_success
+            self._zipline_data = zipline_data
+
+
+        async def get_last_signal(self) -> TradingSignal | Any:
+            # Extract signal from the queue
+            if self._parent._signal_queue.empty():
+                # Create a basic HOLD signal
+                signal = TradingSignal(
+                    signal=SignalType.HOLD,
+                    price=0.0,  # Will be set below
+                    timestamp=pd.Timestamp.now(),
+                    indicators={}
+                )
+            else:
+                # Get the last signal (most recent trading decision)
+                signal = None
+                while not  self._parent._signal_queue.empty():
+                    signal =  self._parent._signal_queue.get_nowait()
+
+                if signal is None:
+                    signal = TradingSignal(
+                        signal=SignalType.HOLD,
+                        price=0.0,
+                        timestamp=pd.Timestamp.now(),
+                        indicators={}
+                    )
+
+            # Always take price from the normalised Zipline dataframe
+            current_price =  self._parent._safe_get_last_value(self._zipline_data['close'])
+            current_timestamp = self._historical_data.index[-1]
+
+            # Update the signal with actual price and indicators
+            signal.price = current_price
+            signal.timestamp = current_timestamp
+            signal.indicators =  self._parent._clean_indicators({
+                'zipline_algorithm': True,
+                'data_frequency': self._data_frequency,
+                'bars_processed': len(self._historical_data),
+                'algorithm_result': 'success' if self._strategy_success else 'error'
+            })
+
+            # Clear signal queue for next extraction
+            self._parent._reset_signal_queue()
+
+            return signal
+
     def reset(self):
         """Reset the signal extractor state"""
         # Clear signal queue
         while not self._signal_queue.empty():
             self._signal_queue.get_nowait()
-        
+
         # Restore order functions if they were patched
         self._restore_order_functions()
-        
+
         logger.debug("ZiplineSignalExtractor reset completed")
 
     def get_stats(self) -> dict:
@@ -612,22 +658,22 @@ class ZiplineEngine(TradingEngine):
         try:
             # Load the module using shared helper
             module = load_module_from_path(strategy_path, f"zipline_strategy")
-            
+
             # Special case: Check if the module itself is a complete Zipline strategy
-            if (hasattr(module, 'initialize') and hasattr(module, 'handle_data') and 
+            if (hasattr(module, 'initialize') and hasattr(module, 'handle_data') and
                 getattr(module, '__zipline_strategy__', False)):
                 logger.info(f"Using module-level strategy from {strategy_path}")
                 return self.create_engine_strategy(module)
-            
+
             # Otherwise use the standard loading process for individual functions/classes
             strategy_candidates = find_strategy_candidates(module, self.is_valid_strategy)
             strategy_name, strategy_obj = select_single_strategy(
                 strategy_candidates, strategy_path, self.get_explicit_marker()
             )
-            
+
             logger.info(f"Loaded ZiplineEngine strategy: {strategy_name} from {strategy_path}")
             return self.create_engine_strategy(strategy_obj)
-            
+
         except Exception as e:
             logger.error(f"Error loading ZiplineEngine strategy from {strategy_path}: {e}")
             raise
@@ -636,8 +682,8 @@ class ZiplineEngine(TradingEngine):
                               **kwargs) -> ZiplineSignalExtractor:
         """Create a signal extractor for the given strategy"""
         return ZiplineSignalExtractor(engine_strategy, symbol, **kwargs)
-    
-    def create_multi_ticker_signal_extractor(self, engine_strategy: ZiplineEngineStrategy, 
+
+    def create_multi_ticker_signal_extractor(self, engine_strategy: ZiplineEngineStrategy,
                                            symbols: list[str], **kwargs) -> 'ZiplineMultiTickerSignalExtractor':
         """Create a multi-ticker signal extractor for processing multiple symbols in one shot"""
         return ZiplineMultiTickerSignalExtractor(engine_strategy, symbols, **kwargs)
@@ -645,7 +691,7 @@ class ZiplineEngine(TradingEngine):
 
 class ZiplineMultiTickerSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
     """Multi-ticker signal extractor for Zipline strategies"""
-    
+
     def __init__(self, engine_strategy: ZiplineEngineStrategy, symbols: list[str], min_bars_required: int = 2, granularity: str = '1min', **strategy_params):
         super().__init__(engine_strategy)
         self.engine_strategy = engine_strategy
@@ -654,10 +700,10 @@ class ZiplineMultiTickerSignalExtractor(BaseSignalExtractor, EngineSignalExtract
         self.min_bars_required = min_bars_required
         self.granularity = granularity
         self.symbols = symbols
-        
+
         # Cache of per-symbol extractors
         self._symbol_extractors = {}
-        
+
     def _get_symbol_extractor(self, symbol: str) -> ZiplineSignalExtractor:
         """Get or create a signal extractor for a specific symbol"""
         if symbol not in self._symbol_extractors:
@@ -669,7 +715,7 @@ class ZiplineMultiTickerSignalExtractor(BaseSignalExtractor, EngineSignalExtract
                 **self.strategy_params
             )
         return self._symbol_extractors[symbol]
-        
+
     async def extract_signals(self, multi_symbol_data: dict[str, pd.DataFrame]) -> dict[str, TradingSignal]:
         """Extract trading signals for multiple symbols using per-symbol Zipline strategy execution"""
         try:
@@ -679,13 +725,13 @@ class ZiplineMultiTickerSignalExtractor(BaseSignalExtractor, EngineSignalExtract
                 logger.warning(f"Missing data for symbols: {missing_symbols}")
                 # Return HOLD signals for missing symbols
                 return {symbol: self._safe_hold() for symbol in missing_symbols}
-            
+
             # Check minimum bars requirement for each symbol
             insufficient_symbols = []
             for symbol in self.symbols:
                 if len(multi_symbol_data[symbol]) < self.min_bars_required:
                     insufficient_symbols.append(symbol)
-            
+
             if insufficient_symbols:
                 logger.warning(f"Insufficient data for symbols: {insufficient_symbols}")
                 # Return HOLD signals for insufficient symbols, process the rest
@@ -697,30 +743,43 @@ class ZiplineMultiTickerSignalExtractor(BaseSignalExtractor, EngineSignalExtract
                     )
                     signals.update(valid_signals)
                 return signals
-            
+
             # All symbols have sufficient data - process them together
             return await self._process_multi_symbol_data(multi_symbol_data)
-            
+
         except Exception as e:
             logger.error(f"Error extracting Zipline multi-ticker signalsxxx: {e}")
             # Return HOLD signals for all symbols
             #return {symbol: self._safe_hold(error=e) for symbol in self.symbols}
-    
+
     async def _process_multi_symbol_data(self, symbol_data: dict[str, pd.DataFrame]) -> dict[str, TradingSignal]:
         """Process multiple symbols using per-symbol strategy execution for safety"""
         signals = {}
-        
+        all_extractor = []
+
         for symbol, df in symbol_data.items():
             try:
                 # Get the per-symbol extractor and run the strategy on this symbol's data
                 extractor = self._get_symbol_extractor(symbol)
-                signal = await extractor.extract_signal(df, symbol_data)
-                signals[symbol] = signal
-                
+                await extractor.extract_signal(df, symbol_data, True)
+                all_extractor.append(extractor)
+
             except Exception as e:
                 logger.error(f"Error processing symbol {symbol}: {e}", exc_info=True)
                 signals[symbol] = self._safe_hold(error=e)
-        
+
+        for extractor in all_extractor:
+            try:
+                if extractor.signal_symbol in signals:
+                    continue
+
+                signal = await extractor.signal_holder.get_last_signal()
+                signals[extractor.signal_symbol] = signal
+
+            except Exception as e:
+                logger.error(f"Error getting the signal for the  symbol {extractor.symbol}: {e}", exc_info=True)
+                signals[extractor.signal_symbol] = self._safe_hold(error=e)
+
         return signals
     
     def reset(self):
