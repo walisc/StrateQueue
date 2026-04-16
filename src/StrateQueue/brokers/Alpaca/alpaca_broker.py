@@ -391,6 +391,11 @@ class AlpacaBroker(BaseBroker):
                     unrealized_pnl=float(position.unrealized_pl),
                     unrealized_pnl_percent=float(position.unrealized_plpc),
                     side="long" if qty > 0 else "short",
+                    additional_fields={
+                        "cost_basis": float(position.cost_basis),
+                        "lastday_price": float(position.lastday_price),
+                        "current_price": float(position.current_price)
+                    }
                 )
             return result
         except APIError as e:
