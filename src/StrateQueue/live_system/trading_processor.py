@@ -111,17 +111,17 @@ class TradingProcessor:
         # Track active signals
         self.active_signals = {}
 
-    async def process_trading_cycle(self, data_manager, alpaca_executor=None):
+    async def process_trading_cycle(self, data_manager, broker_executor=None):
         """Process one trading cycle for all symbols"""
         if self.is_multi_strategy:
-            return await self._process_multi_strategy_cycle(data_manager, alpaca_executor)
+            return await self._process_multi_strategy_cycle(data_manager, broker_executor)
         else:
             if self.use_multi_ticker:
-                return await self._process_single_strategy_multi_ticker_cycle(data_manager)
+                return await self._process_single_strategy_multi_ticker_cycle(data_manager, broker_executor)
             else:
-                return await self._process_single_strategy_cycle(data_manager)
+                return await self._process_single_strategy_cycle(data_manager, broker_executor)
 
-    async def _process_single_strategy_multi_ticker_cycle(self, data_manager) -> dict[str, TradingSignal]:
+    async def _process_single_strategy_multi_ticker_cycle(self, data_manager, broker_executor) -> dict[str, TradingSignal]:
         """Process trading cycle using multi-ticker vectorized signal extraction"""
         signals = {}
         current_prices = {}
@@ -169,7 +169,7 @@ class TradingProcessor:
         if all_symbols_ready and symbol_data:
             try:
                 # Single vectorized call for all symbols
-                multi_signals = await self.multi_ticker_extractor.extract_signals(symbol_data)
+                multi_signals = await self.multi_ticker_extractor.extract_signals(symbol_data, broker_executor)
                 
                 # Update tracking
                 for symbol, signal in multi_signals.items():
@@ -191,7 +191,7 @@ class TradingProcessor:
             
         return signals
 
-    async def _process_single_strategy_cycle(self, data_manager) -> dict[str, TradingSignal]:
+    async def _process_single_strategy_cycle(self, data_manager, broker_executor) -> dict[str, TradingSignal]:
         """Process trading cycle for single strategy mode"""
         signals = {}
         current_prices = {}
@@ -250,7 +250,7 @@ class TradingProcessor:
                         logger.info(
                             f"Processing {symbol} with random strategy: {len(current_data_df)} bars available"
                         )
-                        signal = await self.signal_extractors[symbol].extract_signal(current_data_df, {})
+                        signal = await self.signal_extractors[symbol].extract_signal(current_data_df, {}, broker_executor)
                         signals[symbol] = signal
                         self.active_signals[symbol] = signal
                     else:
