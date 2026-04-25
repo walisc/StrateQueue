@@ -17,7 +17,7 @@ from ..core.strategy_loader import StrategyLoader
 # Engine auto-detection / creation
 from ..engines import EngineFactory, detect_engine_type, auto_create_engine
 from ..multi_strategy import MultiStrategyRunner
-from ..utils.system_config import load_config
+from ..utils.system_config import load_config, MULTI_SYMBOL_SEPERATOR_KEY
 from .data_manager import DataManager
 from .display_manager import DisplayManager
 from .trading_processor import TradingProcessor
@@ -412,9 +412,16 @@ class LiveTradingSystem:
 
     async def _execute_signals(self, signals):
         """Execute trading signals via broker"""
+
+        def extract_signal(_sym):
+            if MULTI_SYMBOL_SEPERATOR_KEY in _sym:
+                return _sym.split(MULTI_SYMBOL_SEPERATOR_KEY)[0]
+            return _sym
+
         if self.is_multi_strategy:
             # Multi-strategy signals: Dict[symbol, Dict[strategy_id, signal]]
-            for symbol, strategy_signals in signals.items():
+            for _symbol, strategy_signals in signals.items():
+                symbol = extract_signal(_symbol)
                 if isinstance(strategy_signals, dict):
                     for strategy_id, signal in strategy_signals.items():
                         if signal.signal != SignalType.HOLD:
@@ -434,7 +441,8 @@ class LiveTradingSystem:
                                 logger.warning(f"❌ Failed to execute {signal.signal.value} for {symbol} [{strategy_id}]")
         else:
             # Single strategy signals: Dict[symbol, signal]
-            for symbol, signal in signals.items():
+            for _symbol, signal in signals.items():
+                symbol = extract_signal(_symbol)
                 if signal.signal != SignalType.HOLD:
                     # Handle both new broker interface and legacy Alpaca executor
                     if hasattr(self.broker_executor, 'execute_signal'):

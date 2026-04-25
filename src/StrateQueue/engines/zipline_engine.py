@@ -15,6 +15,7 @@ from ..core.signal_extractor import TradingSignal, SignalType
 from ..engines.engine_base import (TradingEngine, EngineStrategy, EngineSignalExtractor,
                                   build_engine_info, EngineInfo, load_module_from_path,
                                   find_strategy_candidates, select_single_strategy)
+from ..utils.system_config import MULTI_SYMBOL_SEPERATOR_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -840,7 +841,7 @@ class ZiplineMultiTickerSignalExtractor(BaseSignalExtractor, EngineSignalExtract
 
                 # TODO: [CW] This is a bit of hack for now. To lazy to update everywhere where it expects an object to a list
                 for i, signal in enumerate(_loaded_signals):
-                    signals[f"{extractor.signal_symbol}__##__{i}"] = signal
+                    signals[f"{extractor.signal_symbol}{MULTI_SYMBOL_SEPERATOR_KEY}{i}"] = signal
 
             except Exception as e:
                 logger.error(f"Error getting the signal for the  symbol {extractor.symbol}: {e}", exc_info=True)

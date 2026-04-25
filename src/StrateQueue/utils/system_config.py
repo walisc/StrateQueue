@@ -42,3 +42,5 @@ def load_config() -> tuple[DataConfig, TradingConfig]:
     )
 
     return data_config, trading_config
+
+MULTI_SYMBOL_SEPERATOR_KEY = "__##__"

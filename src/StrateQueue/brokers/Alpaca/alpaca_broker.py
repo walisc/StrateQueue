@@ -18,6 +18,7 @@ try:
 
     from alpaca.common.exceptions import APIError
     from alpaca.trading.client import TradingClient
+    from alpaca.trading.requests import GetOrdersRequest
 
     # Restore original path
     sys.path = original_path
@@ -417,7 +418,7 @@ class AlpacaBroker(BaseBroker):
 
         try:
             if symbol:
-                orders = self.trading_client.get_orders(symbol=symbol)
+                orders = self.trading_client.get_orders(GetOrdersRequest(symbol=[symbol]))
             else:
                 orders = self.trading_client.get_orders()
 
