@@ -187,8 +187,7 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
 
                     def get_order_target_percentage_as_order_target(_target_percent):
                         account = broker_executor.get_account_info()
-                        portfolio_value = account.get("portfolio_value")
-                        portfolio_value_pct = float(portfolio_value * _target_percent)
+                        portfolio_value_pct = float(account.total_value * _target_percent)
                         return get_order_target_value_as_order_target(portfolio_value_pct)
 
                     def get_order_target_value_as_order_target(_target_value):
@@ -236,6 +235,12 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
                             target_percent = target
                             side = SignalType.BUY if target > 0 else (SignalType.SELL if target == 0 else SignalType.BUY)
 
+                    # [CW] There is no point in order 0 shares. In this case it mans we want to sell
+                    if quantity == 0:
+                        target_quantity = 0
+                        side = SignalType.SELL
+                        _modified_func_type = OrderFunction.ORDER_TARGET
+
                 else:
                     if func_type == OrderFunction.ORDER:
                         amount = args[0] if args else kwargs.get("amount", 0)
@@ -252,6 +257,20 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
                         percent = abs(amount)
                         side = SignalType.BUY if amount > 0 else SignalType.SELL
 
+                if side == SignalType.BUY:
+                    if exec_style == ExecStyle.STOP_LIMIT:
+                        side = SignalType.STOP_LIMIT_BUY
+                    elif exec_style == ExecStyle.LIMIT:
+                        side = SignalType.LIMIT_BUY
+                    elif exec_style == ExecStyle.STOP:
+                        side = SignalType.STOP_BUY
+                elif side == SignalType.SELL:
+                    if exec_style == ExecStyle.STOP_LIMIT:
+                        side = SignalType.STOP_LIMIT_SELL
+                    elif exec_style == ExecStyle.LIMIT:
+                        side = SignalType.LIMIT_SELL
+                    elif exec_style == ExecStyle.STOP:
+                        side = SignalType.STOP_SELL
 
                 # Create comprehensive signal
                 signal = TradingSignal(
@@ -543,7 +562,7 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
             self.signal_holder = ZiplineSignalExtractor.SignalHolder(self, data_frequency, historical_data,
                                                                      strategy_success, zipline_data)
             if not delay_signal_return:
-                return await self.signal_holder.get_last_signal()
+                return (await self.signal_holder.get_signals())[0]
             return None
 
         except Exception as e:
@@ -571,48 +590,49 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
             self._zipline_data = zipline_data
 
 
-        async def get_last_signal(self) -> TradingSignal | Any:
+        async def get_signals(self) -> list[TradingSignal | Any]:
             # Extract signal from the queue
             if self._parent._signal_queue.empty():
                 # Create a basic HOLD signal
-                signal = TradingSignal(
+                signals = [TradingSignal(
                     signal=SignalType.HOLD,
                     price=0.0,  # Will be set below
                     timestamp=pd.Timestamp.now(),
                     indicators={}
-                )
+                )]
             else:
                 # Get the last signal (most recent trading decision)
-                signal = None
+                signals = []
                 while not  self._parent._signal_queue.empty():
-                    signal =  self._parent._signal_queue.get_nowait()
+                    signals.append(self._parent._signal_queue.get_nowait())
 
-                if signal is None:
-                    signal = TradingSignal(
+                if len(signals) == 0:
+                    signals.append(TradingSignal(
                         signal=SignalType.HOLD,
                         price=0.0,
                         timestamp=pd.Timestamp.now(),
                         indicators={}
-                    )
+                    ))
 
-            # Always take price from the normalised Zipline dataframe
-            current_price =  self._parent._safe_get_last_value(self._zipline_data['close'])
-            current_timestamp = self._historical_data.index[-1]
+            for signal in signals:
+                # Always take price from the normalised Zipline dataframe
+                current_price =  self._parent._safe_get_last_value(self._zipline_data['close'])
+                current_timestamp = self._historical_data.index[-1]
 
-            # Update the signal with actual price and indicators
-            signal.price = current_price
-            signal.timestamp = current_timestamp
-            signal.indicators =  self._parent._clean_indicators({
-                'zipline_algorithm': True,
-                'data_frequency': self._data_frequency,
-                'bars_processed': len(self._historical_data),
-                'algorithm_result': 'success' if self._strategy_success else 'error'
-            })
+                # Update the signal with actual price and indicators
+                signal.price = current_price
+                signal.timestamp = current_timestamp
+                signal.indicators =  self._parent._clean_indicators({
+                    'zipline_algorithm': True,
+                    'data_frequency': self._data_frequency,
+                    'bars_processed': len(self._historical_data),
+                    'algorithm_result': 'success' if self._strategy_success else 'error'
+                })
 
             # Clear signal queue for next extraction
             self._parent._reset_signal_queue()
 
-            return signal
+            return signals
 
     def reset(self):
         """Reset the signal extractor state"""
@@ -816,8 +836,11 @@ class ZiplineMultiTickerSignalExtractor(BaseSignalExtractor, EngineSignalExtract
                 if extractor.signal_symbol in signals:
                     continue
 
-                signal = await extractor.signal_holder.get_last_signal()
-                signals[extractor.signal_symbol] = signal
+                _loaded_signals = await extractor.signal_holder.get_signals()
+
+                # TODO: [CW] This is a bit of hack for now. To lazy to update everywhere where it expects an object to a list
+                for i, signal in enumerate(_loaded_signals):
+                    signals[f"{extractor.signal_symbol}__##__{i}"] = signal
 
             except Exception as e:
                 logger.error(f"Error getting the signal for the  symbol {extractor.symbol}: {e}", exc_info=True)
