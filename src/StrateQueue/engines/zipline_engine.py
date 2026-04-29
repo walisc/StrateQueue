@@ -183,103 +183,45 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
                 target_value = None
                 target_percent = None
 
-                _modified_func_type = func_type
-                if func_type == OrderFunction.ORDER_TARGET or func_type == OrderFunction.ORDER_TARGET_VALUE or func_type == OrderFunction.ORDER_TARGET_PERCENT:
+                if func_type == OrderFunction.ORDER:
+                    amount = args[0] if args else kwargs.get("amount", 0)
+                    quantity = abs(amount)
+                    side = SignalType.BUY if amount > 0 else SignalType.SELL
 
-                    def get_order_target_percentage_as_order_target(_target_percent):
-                        account = broker_executor.get_account_info()
-                        portfolio_value_pct = float(account.total_value * _target_percent)
-                        return get_order_target_value_as_order_target(portfolio_value_pct)
+                elif func_type == OrderFunction.ORDER_VALUE:
+                    amount = args[0] if args else kwargs.get("value", 0)
+                    value = abs(amount)
+                    side = SignalType.BUY if amount > 0 else SignalType.SELL
 
-                    def get_order_target_value_as_order_target(_target_value):
-                        current_price = self._safe_get_last_value(historic_data['close'])
-                        asset_amount = float(_target_value / current_price)
-                        return get_order_target_as_order_target(asset_amount)
+                elif func_type == OrderFunction.ORDER_PERCENT:
+                    amount = args[0] if args else kwargs.get("percent", 0)
+                    percent = abs(amount)
+                    side = SignalType.BUY if amount > 0 else SignalType.SELL
 
-                    def get_order_target_as_order_target(_target_amount):
-                        asset_amount = _target_amount
-                        all_positions = broker_executor.get_positions()
-                        if self.signal_symbol in all_positions:
-                            current_position = all_positions[self.signal_symbol].quantity
-                            asset_amount -= current_position
+                elif func_type == OrderFunction.ORDER_TARGET:
+                    target = args[0] if args else kwargs.get("target", 0)
+                    target_quantity = target
+                    side = SignalType.BUY if target > 0 else (SignalType.SELL if target == 0 else SignalType.BUY)
 
-                        if asset_amount > 0:
-                            return asset_amount, SignalType.BUY
-                        else:
-                            return asset_amount * -1, SignalType.SELL
+                elif func_type == OrderFunction.ORDER_TARGET_VALUE:
+                    target = args[0] if args else kwargs.get("target", 0)
+                    target_value = target
+                    side = SignalType.BUY if target > 0 else (SignalType.SELL if target == 0 else SignalType.BUY)
 
-
-                    if func_type == OrderFunction.ORDER_TARGET:
-                        target = args[0] if args else kwargs.get("target", 0)
-                        if broker_executor:
-                            quantity, side = get_order_target_as_order_target(target)
-                            _modified_func_type = OrderFunction.ORDER
-                        else:
-                            target_quantity = target
-                            side = SignalType.BUY if target > 0 else (SignalType.SELL if target == 0 else SignalType.BUY)
-
-                    elif func_type == OrderFunction.ORDER_TARGET_VALUE:
-                        target = args[0] if args else kwargs.get("target", 0)
-                        if broker_executor:
-                            quantity, side = get_order_target_value_as_order_target(target)
-                            _modified_func_type = OrderFunction.ORDER
-                        else:
-                            target_value = target
-                            side = SignalType.BUY if target > 0 else ( SignalType.SELL if target == 0 else SignalType.BUY)
-
-                    elif func_type == OrderFunction.ORDER_TARGET_PERCENT:
-                        target = args[0] if args else kwargs.get("target", 0)
-                        if broker_executor:
-                            quantity, side = get_order_target_percentage_as_order_target(target)
-                            _modified_func_type = OrderFunction.ORDER
-                        else:
-                            target_percent = target
-                            side = SignalType.BUY if target > 0 else (SignalType.SELL if target == 0 else SignalType.BUY)
-
-                    # [CW] There is no point in order 0 shares. In this case it mans we want to sell
-                    if quantity == 0:
-                        target_quantity = 0
-                        side = SignalType.SELL
-                        _modified_func_type = OrderFunction.ORDER_TARGET
-
-                else:
-                    if func_type == OrderFunction.ORDER:
-                        amount = args[0] if args else kwargs.get("amount", 0)
-                        quantity = abs(amount)
-                        side = SignalType.BUY if amount > 0 else SignalType.SELL
-
-                    elif func_type == OrderFunction.ORDER_VALUE:
-                        amount = args[0] if args else kwargs.get("value", 0)
-                        value = abs(amount)
-                        side = SignalType.BUY if amount > 0 else SignalType.SELL
-
-                    elif func_type == OrderFunction.ORDER_PERCENT:
-                        amount = args[0] if args else kwargs.get("percent", 0)
-                        percent = abs(amount)
-                        side = SignalType.BUY if amount > 0 else SignalType.SELL
-
-                if side == SignalType.BUY:
-                    if exec_style == ExecStyle.STOP_LIMIT:
-                        side = SignalType.STOP_LIMIT_BUY
-                    elif exec_style == ExecStyle.LIMIT:
-                        side = SignalType.LIMIT_BUY
-                    elif exec_style == ExecStyle.STOP:
-                        side = SignalType.STOP_BUY
-                elif side == SignalType.SELL:
-                    if exec_style == ExecStyle.STOP_LIMIT:
-                        side = SignalType.STOP_LIMIT_SELL
-                    elif exec_style == ExecStyle.LIMIT:
-                        side = SignalType.LIMIT_SELL
-                    elif exec_style == ExecStyle.STOP:
-                        side = SignalType.STOP_SELL
+                elif func_type == OrderFunction.ORDER_TARGET_PERCENT:
+                    target = args[0] if args else kwargs.get("target", 0)
+                    target_percent = target
+                    side = SignalType.BUY if target > 0 else (SignalType.SELL if target == 0 else SignalType.BUY)
 
                 # Create comprehensive signal
+                from StrateQueue.brokers.Alpaca.request_creators.types.zipline_based import AlpacaRequestZiplineBased
                 signal = TradingSignal(
+                    request_creator=AlpacaRequestZiplineBased.ID,
                     signal=side,
                     price=0.0,  # Will be filled in later
                     timestamp=pd.Timestamp.now(),
                     indicators={},
-                    order_function=_modified_func_type,
+                    order_function=func_type,
                     execution_style=exec_style,
                     quantity=quantity,
                     value=value,

@@ -54,6 +54,7 @@ class ExecStyle(str, Enum):
     LIMIT = "limit"
     STOP = "stop"
     STOP_LIMIT = "stop_limit"
+    TRAILING_STOP = "trailing_stop"
 
 
 @dataclass
@@ -90,6 +91,7 @@ class TradingSignal:
     
     # Order management
     order_id: str | None = None  # Order ID from Zipline (if any)
+    request_creator: str | None = None
     
     def __post_init__(self):
         """Post-initialization to set defaults and validate data"""
