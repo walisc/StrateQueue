@@ -231,7 +231,8 @@ class ZiplineSignalExtractor(BaseSignalExtractor, EngineSignalExtractor):
                     target_percent=target_percent,
                     limit_price=limit_price,
                     stop_price=stop_price,
-                    exchange=exchange
+                    exchange=exchange,
+                    metadata=kwargs.get("metadata", {})
                 )
 
                 self._signal_queue.put(signal)

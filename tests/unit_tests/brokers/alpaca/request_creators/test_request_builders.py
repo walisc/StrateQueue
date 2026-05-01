@@ -27,14 +27,14 @@ def test_side_notional_quantity_target_percent():
     current_params = {}
 
 
-    request_builder.build(current_params, "AAPL", signal, "a_client_id")
+    request_builder.do_build(current_params, "AAPL", signal, "a_client_id")
     print(current_params)
 
     broker.set_current_account_positions({
         'AAPL': RequestCreatorTestUtils.get_mock_position('AAPL', 40, 10.0) #
     })
 
-    request_builder.build(current_params, "AAPL", signal, "a_client_id")
+    request_builder.do_build(current_params, "AAPL", signal, "a_client_id")
     print(current_params)
     # -39
 
